@@ -14,8 +14,9 @@ secret_access_key=os.getenv('secret_access_key')
 
 # Create an S3 client
 client = bt.client(
-    's3', aws_access_key_id=access_key,
-          aws_secret_access_key=secret_access_key
+    's3'
+    # , aws_access_key_id=access_key,
+    #       aws_secret_access_key=secret_access_key
 )
 
 # Create the S3 bucket

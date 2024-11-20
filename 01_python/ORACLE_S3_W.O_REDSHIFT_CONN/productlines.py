@@ -55,5 +55,7 @@ def export_table(table_name, s3_folder):
     finally:
         connection.close()
 
-# Run the export function for OFFICES
-export_table('OFFICES', 'OFFICES')
+# Run the export function for PRODUCTLINES
+export_table('PRODUCTLINES', 'PRODUCTLINES')
+
+
