@@ -1,4 +1,4 @@
-name: 'my_new_project'
+name: 'biz'
 version: '1.0.0'
 config-version: 2
 
@@ -18,7 +18,7 @@ clean-targets:         # directories to be removed by `dbt clean`
 
 # Configuring models
 models:
-  my_new_project:  # Make sure the project name matches here
+  biz:  # Make sure the project name matches here
     customers:
       +materialized: incremental
     employees:
@@ -32,4 +32,6 @@ models:
     productlines:
       +materialized: incremental
     products:
+      +materialized: incremental
+    payments:
       +materialized: incremental
