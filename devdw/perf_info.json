@@ -5,8 +5,8 @@
     "static_analysis_parsed_path_count": 0,
     "is_partial_parse_enabled": true,
     "is_static_analysis_enabled": true,
-    "read_files_elapsed": 0.01568225398659706,
-    "load_all_elapsed": 0.040905561996623874,
+    "read_files_elapsed": 0.01634008000837639,
+    "load_all_elapsed": 0.043707644974347204,
     "projects": [
         {
             "project_name": "biz",
