@@ -23,9 +23,9 @@ sources:
       - name: orders
       - name: productlines
       - name: products
-      - name: employees_history
       - name: customer_history
       - name: product_history
+      - name: daily_customer_summary
       - name: monthly_customer_summary
       - name: monthly_product_summary
       - name: daily_product_summary
