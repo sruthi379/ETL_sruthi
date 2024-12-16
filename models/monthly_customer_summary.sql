@@ -1,3 +1,8 @@
+{{ config(
+    materialized='incremental',
+    unique_key='dw_customer_id'
+) }}
+
 WITH 
     batch_info AS (
         SELECT 

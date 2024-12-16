@@ -1,10 +1,13 @@
 -- models/monthly_product_summary.sql
-
+{{ config(
+    materialized='incremental',
+    unique_key='dw_product_id' 
+) }}
 WITH batch_info AS (
     SELECT 
         etl_batch_no,
         etl_batch_date
-    FROM metadata.batch_control
+    FROM {{source("metadata", "batch_control")}}
 ),
 
 existing_updates AS (
@@ -24,8 +27,8 @@ existing_updates AS (
         CURRENT_TIMESTAMP AS dw_update_timestamp,
         batch_info.etl_batch_no AS etl_batch_no,
         batch_info.etl_batch_date AS etl_batch_date
-    FROM "dev"."devdw"."daily_product_summary" src_data
-    JOIN "dev"."devdw"."monthly_product_summary" tar_data
+    FROM {{source("devdw", "daily_product_summary")}} src_data
+    JOIN {{source("devdw", "monthly_product_summary")}} tar_data
         ON tar_data.dw_product_id = src_data.dw_product_id
         AND DATE_TRUNC('month', src_data.summary_date) = tar_data.start_of_the_month_date
     JOIN batch_info
@@ -55,8 +58,8 @@ new_entries AS (
         CURRENT_TIMESTAMP AS dw_update_timestamp,
         batch_info.etl_batch_no AS etl_batch_no,
         batch_info.etl_batch_date AS etl_batch_date
-    FROM "dev"."devdw"."daily_product_summary" src_data
-    LEFT JOIN "dev"."devdw"."monthly_product_summary" tar_data
+    FROM {{source("devdw", "daily_product_summary")}} src_data
+    LEFT JOIN {{source("devdw", "monthly_product_summary")}} tar_data
         ON tar_data.dw_product_id = src_data.dw_product_id
         AND DATE_TRUNC('month', src_data.summary_date) = tar_data.start_of_the_month_date
     JOIN batch_info
