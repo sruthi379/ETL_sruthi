@@ -3,67 +3,68 @@
     unique_key='dw_product_id'  
 ) }}
 
-with
+{{ config(
+    materialized='incremental',
+    unique_key='dw_product_id'  
+) }}
 
-    -- Batch Data Source
-    batch_data as (
-        select 
-            etl_batch_date, 
-            etl_batch_no 
-        from {{ source('metadata', 'batch_control') }}
-    ),
-    
-    -- Update Data Source
-    update_data as (
-        select 
-            hist.dw_product_id,
-            hist.msrp,
-            hist.effective_from_date,
-            0 as dw_active_record_ind,
-            DATEADD(day, -1, b.etl_batch_date) as effective_to_date,
-            hist.dw_create_timestamp,
-            current_timestamp as dw_update_timestamp,
-            hist.create_etl_batch_date,
-            hist.create_etl_batch_no,
-            b.etl_batch_no as update_etl_batch_no,
-            b.etl_batch_date as update_etl_batch_date
-        from {{ source('devdw', 'product_history') }} hist
-        join {{ source('devdw', 'products') }} prod 
-            on hist.dw_product_id = prod.dw_product_id
-        cross join batch_data b
-        where 
-            hist.msrp != prod.msrp 
-            and hist.dw_active_record_ind = 1
-    ),
-    
-    -- Insert Data Source
-    insert_data as (
-        select 
-            prod.dw_product_id,
-            prod.msrp,
-            b.etl_batch_date as effective_from_date,
-            1 as dw_active_record_ind,
-            null as effective_to_date,
-            current_timestamp as dw_create_timestamp,
-            current_timestamp as dw_update_timestamp,
-            b.etl_batch_date as create_etl_batch_date,
-            b.etl_batch_no as create_etl_batch_no,
-            null as update_etl_batch_no,
-            null as update_etl_batch_date
-        from {{ source('devdw', 'products') }} prod
-        left join {{ source('devdw', 'product_history') }} hist
-            on prod.dw_product_id = hist.dw_product_id
-            and hist.dw_active_record_ind = 1
-        cross join batch_data b
-        where hist.dw_product_id is null
-    ),
-    
-    -- Merged Data (Union of Updates and Inserts)
-    merged_data as (
-        select * from update_data
-        union all
-        select * from insert_data
-    )
+WITH batch_metadata AS (
+    SELECT
+        etl_batch_no,
+        etl_batch_date
+    FROM {{source("metadata", "batch_control")}}
+),
+x AS (
+    -- Orders data aggregation
+    SELECT CAST(TO_CHAR(O.orderDate, 'YYYY-MM-DD') AS DATE) AS summary_date,
+        p.dw_product_id,
+        1 AS customer_apd,
+        SUM(OD.quantityOrdered * p.buyPrice) AS product_cost_amount,
+        SUM(OD.quantityOrdered * p.MSRP) AS product_mrp_amount,
+        0 AS cancelled_product_qty,
+        0 AS cancelled_cost_amount,
+        0 AS cancelled_mrp_amount,
+        0 AS cancelled_order_apd
+    FROM {{source("devdw", "orders")}} O
+    JOIN {{source("devdw", "orderdetails")}} OD ON O.src_orderNumber = OD.src_orderNumber
+    JOIN {{source("devdw", "products")}} p ON p.src_productCode = OD.src_productCode
+    CROSS JOIN batch_metadata b
+    WHERE CAST(O.orderDate AS DATE) >= b.etl_batch_date
+    GROUP BY summary_date, p.dw_product_id
 
--- Final select from the merged data
-select * from merged_data
+    UNION ALL
+
+    -- Cancellations data aggregation
+    SELECT CAST(TO_CHAR(O.cancelledDate, 'YYYY-MM-DD') AS DATE) AS summary_date,
+        p.dw_product_id,
+        0 AS customer_apd,
+        0 AS product_cost_amount,
+        0 AS product_mrp_amount,
+        SUM(OD.quantityOrdered) AS cancelled_product_qty,
+        SUM(OD.quantityOrdered * p.buyPrice) AS cancelled_cost_amount,
+        SUM(OD.quantityOrdered * p.MSRP) AS cancelled_mrp_amount,
+        1 AS cancelled_order_apd
+    FROM {{source("devdw", "orders")}} O
+    JOIN {{source("devdw", "orderdetails")}} OD ON O.src_orderNumber = OD.src_orderNumber
+    JOIN {{source("devdw", "products")}} p ON p.src_productCode = OD.src_productCode
+    CROSS JOIN batch_metadata b
+    WHERE O.status = 'Cancelled'
+    AND CAST(O.cancelledDate AS DATE) >= b.etl_batch_date
+    GROUP BY summary_date, p.dw_product_id
+)
+SELECT summary_date,
+    dw_product_id,
+    SUM(customer_apd) AS customer_apd,
+    SUM(product_cost_amount) AS product_cost_amount,
+    SUM(product_mrp_amount) AS product_mrp_amount,
+    SUM(cancelled_product_qty) AS cancelled_product_qty,
+    SUM(cancelled_cost_amount) AS cancelled_cost_amount,
+    SUM(cancelled_mrp_amount) AS cancelled_mrp_amount,
+    SUM(cancelled_order_apd) AS cancelled_order_apd,
+    CURRENT_TIMESTAMP AS dw_create_timestamp,
+    CURRENT_TIMESTAMP AS dw_update_timestamp,
+    MAX(b.etl_batch_no) AS etl_batch_no,
+    MAX(b.etl_batch_date) AS etl_batch_date
+FROM x
+CROSS JOIN batch_metadata b
+GROUP BY summary_date, dw_product_id
