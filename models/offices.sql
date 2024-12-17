@@ -29,9 +29,9 @@ WITH ranked_data AS (
         END AS dw_update_timestamp,
         CURRENT_TIMESTAMP AS dw_create_timestamp
     FROM
-        {{ source('devstage', 'offices') }} sd  -- Referencing devstage.offices
-    LEFT JOIN {{ source('devdw', 'offices') }} ed ON sd.officecode = ed.officecode  -- Referencing devdw.offices
-    CROSS JOIN {{ source('metadata', 'batch_control') }} em  -- Referencing metadata.batch_control
+        devstage.offices sd --{{ source('devstage', 'offices') }} sd  -- Referencing devstage.offices
+    LEFT JOIN devdw.offices ed ON sd.officecode = ed.officecode --{{ source('devdw', 'offices') }} ed ON sd.officecode = ed.officecode  -- Referencing devdw.offices
+    CROSS JOIN metadata.batch_control em --{{ source('metadata', 'batch_control') }} em  -- Referencing metadata.batch_control
 )
 
 SELECT 
