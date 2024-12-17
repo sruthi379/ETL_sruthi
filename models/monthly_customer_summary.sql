@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='dw_customer_id'
+    unique_key=['dw_customer_id', 'start_of_the_month_date']
 ) }}
 
 WITH 
