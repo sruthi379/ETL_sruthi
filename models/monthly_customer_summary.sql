@@ -8,7 +8,7 @@ WITH
         SELECT 
             etl_batch_date, 
             etl_batch_no 
-        FROM metadata.batch_control
+        FROM {{ source('metadata', 'batch_control') }}
     ),
     aggregated_data AS (
         SELECT
@@ -36,7 +36,7 @@ WITH
             MAX(new_customer_apd) AS new_customer_apm,
             0 AS new_customer_paid_apd,
             0 AS new_customer_paid_apm
-        FROM "dev"."devdw"."daily_customer_summary" src_data
+        FROM {{ source('devdw', 'daily_customer_summary') }} src_data
         CROSS JOIN batch_info b
         WHERE DATE_TRUNC('month', summary_date) >= DATE_TRUNC('month', b.etl_batch_date)
         GROUP BY DATE_TRUNC('month', summary_date), dw_customer_id
