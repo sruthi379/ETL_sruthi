@@ -22,7 +22,7 @@ WITH
             b.etl_batch_no AS update_etl_batch_no,
             b.etl_batch_date AS update_etl_batch_date
         FROM {{source("devdw", "product_history")}} hist
-        JOIN {{source("devdw", "products")}} prod 
+        JOIN {{ref("products")}} prod 
             ON hist.dw_product_id = prod.dw_product_id
         CROSS JOIN batch_data b
         WHERE 
@@ -42,7 +42,7 @@ WITH
             b.etl_batch_no AS create_etl_batch_no,
             NULL AS update_etl_batch_no,
             NULL AS update_etl_batch_date
-        FROM {{source("devdw", "products")}} prod
+        FROM JOIN {{ref("products")}} prod
         LEFT JOIN {{source("devdw", "product_history")}} hist
             ON prod.dw_product_id = hist.dw_product_id
             AND hist.dw_active_record_ind = 1
