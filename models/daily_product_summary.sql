@@ -3,10 +3,7 @@
     unique_key=['dw_product_id' ,'summary_date']
 ) }}
 
-{{ config(
-    materialized='incremental',
-    unique_key='dw_product_id'  
-) }}
+
 
 WITH batch_metadata AS (
     SELECT
