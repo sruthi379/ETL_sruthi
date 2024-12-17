@@ -42,7 +42,7 @@ WITH
             b.etl_batch_no AS create_etl_batch_no,
             NULL AS update_etl_batch_no,
             NULL AS update_etl_batch_date
-        FROM JOIN {{ref("products")}} prod
+        FROM {{ref("products")}} prod
         LEFT JOIN {{source("devdw", "product_history")}} hist
             ON prod.dw_product_id = hist.dw_product_id
             AND hist.dw_active_record_ind = 1
