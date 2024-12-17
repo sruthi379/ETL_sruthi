@@ -35,7 +35,7 @@ new_payments AS (
     CROSS JOIN batch_control  -- Ensures batch details are included
     LEFT JOIN {{ source('devdw', 'payments') }} AS payments_dw
         ON payments_src.CHECKNUMBER = payments_dw.CHECKNUMBER
-    LEFT JOIN {{ source('devdw', 'customers') }} AS customers_dw
+    LEFT JOIN {{ ref('customers') }} AS customers_dw
         ON payments_src.CUSTOMERNUMBER = customers_dw.SRC_CUSTOMERNUMBER
     WHERE payments_dw.CHECKNUMBER IS NULL
 )

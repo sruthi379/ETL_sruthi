@@ -31,7 +31,7 @@ WITH ranked_data AS (
     FROM
         {{ source('devstage', 'products') }} sd  -- Referencing devstage.products
     LEFT JOIN {{ source('devdw', 'products') }} ed ON sd.productcode = ed.src_productcode  -- Referencing devdw.products
-    LEFT JOIN {{ source('devdw', 'productlines') }} pl ON sd.productline = pl.productline  -- Referencing devdw.productlines
+    LEFT JOIN {{ ref('productlines') }} pl ON sd.productline = pl.productline  -- Referencing devdw.productlines
     CROSS JOIN {{ source('metadata', 'batch_control') }} em  -- Referencing metadata.batch_control
 )
 

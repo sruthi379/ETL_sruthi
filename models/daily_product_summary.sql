@@ -22,9 +22,9 @@ x AS (
         0 AS cancelled_cost_amount,
         0 AS cancelled_mrp_amount,
         0 AS cancelled_order_apd
-    FROM {{source("devdw", "orders")}} O
-    JOIN {{source("devdw", "orderdetails")}} OD ON O.src_orderNumber = OD.src_orderNumber
-    JOIN {{source("devdw", "products")}} p ON p.src_productCode = OD.src_productCode
+    FROM {{ref("orders")}} O
+    JOIN {{ref("orderdetails")}} OD ON O.src_orderNumber = OD.src_orderNumber
+    JOIN {{ref("products")}} p ON p.src_productCode = OD.src_productCode
     CROSS JOIN batch_metadata b
     WHERE CAST(O.orderDate AS DATE) >= b.etl_batch_date
     GROUP BY summary_date, p.dw_product_id
@@ -41,9 +41,9 @@ x AS (
         SUM(OD.quantityOrdered * p.buyPrice) AS cancelled_cost_amount,
         SUM(OD.quantityOrdered * p.MSRP) AS cancelled_mrp_amount,
         1 AS cancelled_order_apd
-    FROM {{source("devdw", "orders")}} O
-    JOIN {{source("devdw", "orderdetails")}} OD ON O.src_orderNumber = OD.src_orderNumber
-    JOIN {{source("devdw", "products")}} p ON p.src_productCode = OD.src_productCode
+    FROM {{ref( "orders")}} O
+    JOIN {{ref( "orderdetails")}} OD ON O.src_orderNumber = OD.src_orderNumber
+    JOIN {{ref("products")}} p ON p.src_productCode = OD.src_productCode
     CROSS JOIN batch_metadata b
     WHERE O.status = 'Cancelled'
     AND CAST(O.cancelledDate AS DATE) >= b.etl_batch_date

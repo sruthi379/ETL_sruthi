@@ -1,3 +1,4 @@
+
 {{ config(
     materialized='incremental',
     unique_key='employeenumber'
@@ -31,8 +32,8 @@ WITH ranked_data AS (
         re.dw_employee_id AS dw_reporting_employee_id
     FROM
         {{ source('devstage', 'employees') }} sd  -- Referencing devstage.employees
-    LEFT JOIN {{ source('devdw', 'employees') }} ed ON sd.employeenumber = ed.employeenumber  -- Referencing devdw.employees
-    LEFT JOIN {{ source('devdw', 'offices') }} o ON sd.officecode = o.officecode  -- Referencing devdw.offices
+    LEFT JOIN {{ source('devdw','employees') }} ed ON sd.employeenumber = ed.employeenumber  -- Referencing devdw.employees
+    LEFT JOIN {{ ref('offices') }} o ON sd.officecode = o.officecode  -- Referencing devdw.offices
     LEFT JOIN {{ source('devdw', 'employees') }} re ON sd.reportsto = re.employeenumber  -- Referencing devdw.employees (for reporting)
     CROSS JOIN {{ source('metadata', 'batch_control') }} em  -- Referencing metadata.batch_control
 )

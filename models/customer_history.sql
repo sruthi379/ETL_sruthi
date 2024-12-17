@@ -49,7 +49,7 @@ insert_new_records AS (
         batch_info.etl_batch_date AS create_etl_batch_date,
         NULL AS update_etl_batch_no, -- Placeholder for UNION compatibility
         NULL AS update_etl_batch_date -- Placeholder for UNION compatibility
-    FROM devdw.Customers src
+    FROM {{ref ('customers' )}} src
     LEFT JOIN devdw.customer_history hist
       ON src.dw_customer_id = hist.dw_customer_id
       AND hist.dw_active_record_ind = 1

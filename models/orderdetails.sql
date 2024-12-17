@@ -61,8 +61,8 @@ final_data AS (
     LEFT JOIN existing_orderdetails AS dw
         ON st.src_ordernumber = dw.src_ordernumber
         AND st.src_productcode = dw.src_productcode
-    LEFT JOIN {{ source('devdw', 'orders') }} o ON st.src_ordernumber = o.src_ordernumber
-    LEFT JOIN {{ source('devdw', 'products') }} p ON st.src_productcode = p.src_productcode
+    LEFT JOIN {{ ref( 'orders') }} o ON st.src_ordernumber = o.src_ordernumber
+    LEFT JOIN {{ ref( 'products') }} p ON st.src_productcode = p.src_productcode
     WHERE dw.src_ordernumber IS NULL
 )
 

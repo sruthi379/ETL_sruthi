@@ -30,7 +30,7 @@ x_data AS (
         0 AS order_mrp_amount,
         1 AS new_customer_apd,
         0 AS new_customer_paid_apd
-    FROM {{ source('devdw', 'customers') }} c
+    FROM {{ ref('customers') }} c
     CROSS JOIN batch_info b
     WHERE CAST(src_create_timestamp AS DATE) >= b.etl_batch_date
     UNION ALL
@@ -54,8 +54,8 @@ x_data AS (
         0 AS order_mrp_amount,
         0 AS new_customer_apd,
         0 AS new_customer_paid_apd
-    FROM {{ source('devdw', 'orders') }} o
-    JOIN {{ source('devdw', 'orderdetails') }} od ON o.dw_order_id = od.dw_order_id
+    FROM {{ ref('orders') }} o
+    JOIN {{ ref('orderdetails') }} od ON o.dw_order_id = od.dw_order_id
     CROSS JOIN batch_info b
     WHERE CAST(o.cancelledDate AS DATE) >= b.etl_batch_date
     AND   o.status = 'Cancelled'
@@ -90,7 +90,7 @@ x_data AS (
                dw_customer_id,
                amount,
                RANK() OVER (PARTITION BY dw_customer_id ORDER BY paymentdate) AS rank1
-        FROM {{ source('devdw', 'payments') }}
+        FROM {{ ref( 'payments') }}
     ) p
     CROSS JOIN batch_info b
     WHERE CAST(p.paymentDate AS DATE) >= b.etl_batch_date
@@ -118,8 +118,8 @@ x_data AS (
         0 AS order_mrp_amount,
         0 AS new_customer_apd,
         0 AS new_customer_paid_apd
-    FROM {{ source('devdw', 'orders') }} o
-    JOIN {{ source('devdw', 'orderdetails') }} od ON o.dw_order_id = od.dw_order_id
+    FROM {{ ref( 'orders') }} o
+    JOIN {{ ref('orderdetails') }} od ON o.dw_order_id = od.dw_order_id
     CROSS JOIN batch_info b
     WHERE CAST(o.ShippedDate AS DATE) >= b.etl_batch_date
     AND   o.status = 'Shipped'
@@ -146,9 +146,9 @@ x_data AS (
         SUM(od.quantityOrdered*p.msrp) AS order_mrp_amount,
         0 AS new_customer_apd,
         0 AS new_customer_paid_apd
-    FROM {{ source('devdw', 'orders') }} o
-    JOIN {{ source('devdw', 'orderdetails') }} od ON o.dw_order_id = od.dw_order_id
-    JOIN {{ source('devdw', 'products') }} p ON od.src_productCode = p.src_productCode
+    FROM {{ ref('orders') }} o
+    JOIN {{ ref( 'orderdetails') }} od ON o.dw_order_id = od.dw_order_id
+    JOIN {{ ref( 'products') }} p ON od.src_productCode = p.src_productCode
     CROSS JOIN batch_info b
     WHERE CAST(o.OrderDate AS DATE) >= b.etl_batch_date
     GROUP BY CAST(o.OrderDate AS DATE),

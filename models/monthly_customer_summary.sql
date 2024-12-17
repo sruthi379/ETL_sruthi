@@ -36,7 +36,7 @@ WITH
             MAX(new_customer_apd) AS new_customer_apm,
             0 AS new_customer_paid_apd,
             0 AS new_customer_paid_apm
-        FROM {{ source('devdw', 'daily_customer_summary') }} src_data
+        FROM {{ ref( 'daily_customer_summary') }} src_data
         CROSS JOIN batch_info b
         WHERE DATE_TRUNC('month', summary_date) >= DATE_TRUNC('month', b.etl_batch_date)
         GROUP BY DATE_TRUNC('month', summary_date), dw_customer_id
