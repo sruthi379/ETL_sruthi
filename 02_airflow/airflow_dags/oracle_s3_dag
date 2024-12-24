@@ -1,1 +1,41 @@
+import os
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from datetime import datetime, timedelta  # Import timedelta
+
+# Define default arguments
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),  # Fix: Import timedelta
+}
+
+# Define the scripts path
+scripts_path = "/root/airflow/scripts/ORACLE_S3_REDSHIFT_CONN"  # Replace with your actual path
+
+# Define the DAG
+with DAG(
+    dag_id='oracle_to_s3_dag',
+    default_args=default_args,
+    description='Run Oracle to S3 scripts',
+    schedule_interval=None,  # You can set '@daily' or other intervals
+    start_date=datetime(2023, 11, 27),
+    catchup=False,
+) as dag:
+
+    # Create tasks for each script
+    tasks = []
+    for script in os.listdir(scripts_path):
+        if script.endswith(".py"):
+            task = BashOperator(
+                task_id=f"run_{script.split('.')[0]}",
+                bash_command=f"python {scripts_path}/{script}"
+            )
+            tasks.append(task)
+
+    # Set dependencies (optional, if needed)
+    if len(tasks) > 1:
+        tasks[0] >> tasks[1:]  # Run the first script before the others
+
 
