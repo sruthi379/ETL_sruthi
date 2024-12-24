@@ -1,0 +1,79 @@
+import boto3
+import psycopg2
+from awsglue.utils import getResolvedOptions
+import sys
+
+# Fetch job parameters
+args = getResolvedOptions(
+    sys.argv,
+    ['REDSHIFT_IAM_ROLE', 'AWS_BUCKET_NAME', 'REDSHIFT_USER', 'REDSHIFT_PASSWORD', 'REDSHIFT_DBNAME', 'REDSHIFT_HOST', 'REDSHIFT_PORT']
+)
+
+# Extract parameters
+redshift_iam_role = args['REDSHIFT_IAM_ROLE']
+s3_bucket = args['AWS_BUCKET_NAME']
+redshift_user = args['REDSHIFT_USER']
+redshift_password = args['REDSHIFT_PASSWORD']
+redshift_db = args['REDSHIFT_DBNAME']
+redshift_host = args['REDSHIFT_HOST']
+redshift_port = args['REDSHIFT_PORT']
+
+def get_etl_batch_date():
+    try:
+        with psycopg2.connect(
+            dbname=redshift_db,
+            user=redshift_user,
+            password=redshift_password,
+            host=redshift_host,
+            port=redshift_port
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT etl_batch_date FROM metadata.batch_control")
+                result = cursor.fetchone()
+                return result[0] if result else None
+    except Exception as e:
+        print(f"Error fetching ETL batch date: {e}")
+        return None
+
+def load_data_to_redshift_productlines(etl_batch_date):
+    try:
+        with psycopg2.connect(
+            dbname=redshift_db,
+            user=redshift_user,
+            password=redshift_password,
+            host=redshift_host,
+            port=redshift_port
+        ) as connection:
+            with connection.cursor() as cursor:
+                s3_key = f"s3://{s3_bucket}/PRODUCTLINES/{etl_batch_date}/PRODUCTLINES.csv"
+                
+                # COPY command for PRODUCTLINES
+                copy_command = f"""
+                COPY devstage.PRODUCTLINES (
+                    PRODUCTLINE, TEXTDESCRIPTION, HTMLDESCRIPTION, IMAGE, CREATE_TIMESTAMP, UPDATE_TIMESTAMP
+                )
+                FROM '{s3_key}'
+                IAM_ROLE '{redshift_iam_role}'
+                FORMAT AS CSV
+                DELIMITER ','
+                QUOTE '"'
+                IGNOREHEADER 1
+                DATEFORMAT 'auto'
+                TIMEFORMAT 'auto'
+                ACCEPTINVCHARS AS '?'
+                FILLRECORD
+                IGNOREBLANKLINES
+                TRIMBLANKS
+                EMPTYASNULL;
+                """
+                cursor.execute(copy_command)
+                connection.commit()
+                print(f"Data successfully loaded into devstage.PRODUCTLINES")
+    except Exception as e:
+        print(f"Error loading data into PRODUCTLINES: {e}")
+
+etl_batch_date = get_etl_batch_date()
+if etl_batch_date:
+    load_data_to_redshift_productlines(etl_batch_date)
+else:
+    print("ETL batch date not found. Exiting.")
