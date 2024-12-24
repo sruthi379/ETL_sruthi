@@ -1,0 +1,213 @@
+from airflow import DAG
+from airflow.providers.amazon.aws.operators.glue import GlueJobOperator
+from airflow.operators.python import PythonOperator
+from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
+from datetime import datetime, timedelta
+import os
+import subprocess
+import redshift_connector
+from dotenv import load_dotenv
+import logging
+# Load environment variables
+load_dotenv()
+
+# Redshift configuration (from your environment variables)
+redshift_host = os.getenv("REDSHIFT_HOST")
+redshift_port = int(os.getenv("REDSHIFT_PORT"))
+redshift_db = os.getenv("REDSHIFT_DBNAME")  # Use REDSHIFT_DBNAME instead of REDSHIFT_DB
+redshift_user = os.getenv("REDSHIFT_USER")
+redshift_password = os.getenv("REDSHIFT_PASSWORD")
+
+# Oracle configuration
+oracle_host = os.getenv("ORACLE_HOST")
+oracle_port = os.getenv("ORACLE_PORT")
+oracle_service_name = os.getenv("ORACLE_SERVICE_NAME")
+oracle_username = os.getenv("ORACLE_USERNAME")
+oracle_password = os.getenv("ORACLE_PASSWORD")
+
+# AWS configuration
+aws_access_key = os.getenv("ACCESS_KEY")
+aws_secret_access_key = os.getenv("SECRET_ACCESS_KEY")
+aws_bucket_name = os.getenv("AWS_BUCKET_NAME")
+
+# Paths and configurations
+SCRIPTS_DIR = "/root/airflow/scripts/ORACLE_S3_REDSHIFT_CONN/"
+SCRIPTS_SRC_S3 = [
+    "offices.py", "employees.py", "customers.py", "payments.py",
+    "orders.py", "orderdetails.py", "products.py", "productlines.py"
+]
+
+# Log file path
+LOG_FILE = "/root/airflow/logs/oracle_s3_glue_dag.log"
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# Tables to truncate
+tables_to_truncate = [
+    "offices", "employees", "customers", "payments", "orders",
+    "orderdetails", "products", "productlines"
+]
+
+# Define default arguments
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
+# Function to get Redshift connection
+def get_redshift_connection():
+    return redshift_connector.connect(
+        host=redshift_host,
+        port=redshift_port,
+        database=redshift_db,
+        user=redshift_user,
+        password=redshift_password
+    )
+
+# Function to get the latest batch info
+def get_latest_batch_info():
+    connection = get_redshift_connection()
+    cursor = connection.cursor()
+    query = """
+        SELECT etl_batch_no, etl_batch_date 
+        FROM metadata.batch_control 
+        ORDER BY etl_batch_date DESC, etl_batch_no DESC 
+        LIMIT 1
+    """
+    try:
+        cursor.execute(query)
+        result = cursor.fetchone()
+        if result:
+            return result
+        else:
+            raise ValueError("No batch information found in batch_control.")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Function to log the batch start
+def log_batch_start():
+    etl_batch_no, etl_batch_date = get_latest_batch_info()
+    connection = get_redshift_connection()
+    cursor = connection.cursor()
+    etl_batch_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    insert_query = f"""
+        INSERT INTO metadata.batch_control_log (
+            etl_batch_no, etl_batch_date, etl_batch_status, etl_batch_start_time
+        ) VALUES (
+            {etl_batch_no}, '{etl_batch_date}', '0', '{etl_batch_start_time}'
+        )
+    """
+    try:
+        cursor.execute(insert_query)
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+# Function to log the batch end
+def log_batch_end():
+    etl_batch_no, etl_batch_date = get_latest_batch_info()
+    connection = get_redshift_connection()
+    cursor = connection.cursor()
+    etl_batch_end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    update_query = f"""
+        UPDATE metadata.batch_control_log 
+        SET etl_batch_status = '1', 
+            etl_batch_end_time = '{etl_batch_end_time}', 
+            batch_duration = 
+              LPAD(EXTRACT(HOUR FROM ('{etl_batch_end_time}' - etl_batch_start_time))::TEXT, 2, '0') || ':' ||
+              LPAD(EXTRACT(MINUTE FROM ('{etl_batch_end_time}' - etl_batch_start_time))::TEXT, 2, '0') || ':' ||
+              LPAD(EXTRACT(SECOND FROM ('{etl_batch_end_time}' - etl_batch_start_time))::TEXT, 2, '0')
+        WHERE etl_batch_no = {etl_batch_no} AND etl_batch_date = '{etl_batch_date}'
+    """
+    try:
+        cursor.execute(update_query)
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+# Function to run Oracle to S3 export
+def run_oracle_to_s3(table_name: str):
+    script_path = os.path.join(SCRIPTS_DIR, f"{table_name.lower()}.py")
+    if os.path.exists(script_path):
+        print(f"Executing script for table {table_name}: {script_path}")
+        try:
+            subprocess.check_call(['python', script_path])
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing script {script_path}: {e}")
+            raise
+    else:
+        print(f"Script for table {table_name} not found at {script_path}")
+
+# Define the DAG
+with DAG(
+    dag_id='oracle_to_s3_and_glue_dbt_dag',
+    default_args=default_args,
+    description='DAG to run Oracle to S3, Glue jobs, and DBT jobs',
+    schedule_interval=None,  # Set a schedule if needed
+    start_date=datetime(2023, 11, 27),
+    catchup=False,
+) as dag:
+
+    # Batch start task
+    batch_start_task = PythonOperator(
+        task_id='log_batch_start',
+        python_callable=log_batch_start
+    )
+
+    # Run Oracle to S3 for multiple tables using PythonOperator
+    oracle_to_s3_tasks = []
+    table_names = ['CUSTOMERS', 'ORDERS', 'EMPLOYEES', 'PRODUCTS', 'PAYMENTS', 'ORDERDETAILS', 'OFFICES', 'PRODUCTLINES']
+    for table_name in table_names:
+        oracle_to_s3_task = PythonOperator(
+            task_id=f"oracle_to_s3_{table_name}",
+            python_callable=run_oracle_to_s3,
+            op_args=[table_name],
+        )
+        oracle_to_s3_tasks.append(oracle_to_s3_task)
+
+    # Task to trigger Glue job for each table using GlueJobOperator
+    glue_job_tasks = []
+    for table_name in table_names:
+        glue_job_task = GlueJobOperator(
+            task_id=f"trigger_glue_job_{table_name}",
+            job_name=f"S3_STAGE_{table_name}",
+            script_location=f"s3://{aws_bucket_name}/scripts/S3_STAGE_{table_name}.py",  # Use AWS bucket name
+            region_name="us-east-1",
+            iam_role_name="awsglueconsolefullaccess",
+        )
+        glue_job_tasks.append(glue_job_task)
+
+    # DBT task
+    dbt_task = DbtCloudRunJobOperator(
+        task_id="dbt_run_job",
+        dbt_cloud_conn_id="dbt_cloud_default",
+        job_id=70471823404598,  # Replace with your job ID
+        check_interval=30,
+        timeout=300,
+    )
+
+    # Batch end task
+    batch_end_task = PythonOperator(
+        task_id='log_batch_end',
+        python_callable=log_batch_end
+    )
+
+    # Define task dependencies
+    batch_start_task >> oracle_to_s3_tasks  # batch_start_task must run before all Oracle to S3 tasks
+    for oracle_task in oracle_to_s3_tasks:
+        oracle_task >> glue_job_tasks  # each oracle_task must run before all glue_job_tasks
+
+    # glue_job_tasks must run before the dbt_task
+    for glue_task in glue_job_tasks:
+        glue_task >> dbt_task
+
+    # dbt_task must run before batch_end_task
+    dbt_task >> batch_end_task
