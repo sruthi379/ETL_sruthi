@@ -1,0 +1,76 @@
+from airflow import DAG
+from airflow.providers.amazon.aws.operators.glue import GlueJobOperator
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
+import os
+import subprocess
+
+# Define default arguments
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
+# Define the path to the directory containing Python scripts
+SCRIPTS_DIR = "/root/airflow/scripts/ORACLE_S3_REDSHIFT_CONN/"
+
+# Function to run Oracle to S3 logic
+def run_oracle_to_s3(table_name: str):
+    """
+    Run the script associated with a specific table to export data from Oracle to S3.
+    Each script is expected to be named as <table_name>.py in the SCRIPTS_DIR.
+    """
+    script_path = os.path.join(SCRIPTS_DIR, f"{table_name.lower()}.py")  # Scripts are named in lowercase
+
+    if os.path.exists(script_path):
+        print(f"Executing script for table {table_name}: {script_path}")
+        try:
+            # Execute the script
+            subprocess.check_call(['python', script_path])
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing script {script_path}: {e}")
+            raise
+    else:
+        print(f"Script for table {table_name} not found at {script_path}")
+
+# Define the DAG
+with DAG(
+    dag_id='oracle_to_s3_and_glue_dag',
+    default_args=default_args,
+    description='DAG to run Oracle to S3 and Glue jobs',
+    schedule_interval=None,  # Set a schedule if needed
+    start_date=datetime(2023, 11, 27),
+    catchup=False,
+) as dag:
+
+    # Task 1: Run Oracle to S3 for multiple tables using PythonOperator
+    # This will run multiple tables in parallel
+    oracle_to_s3_tasks = []
+    table_names = ['CUSTOMERS', 'ORDERS', 'EMPLOYEES', 'PRODUCTS', 'PAYMENTS', 'ORDERDETAILS', 'OFFICES', 'PRODUCTLINES']
+
+    for table_name in table_names:
+        oracle_to_s3_task = PythonOperator(
+            task_id=f"oracle_to_s3_{table_name}",
+            python_callable=run_oracle_to_s3,
+            op_args=[table_name],  # Pass table name as argument
+        )
+        oracle_to_s3_tasks.append(oracle_to_s3_task)
+
+    # Task 2: Trigger Glue Job for each table using GlueJobOperator
+    glue_job_tasks = []
+    for table_name in table_names:
+        glue_job_task = GlueJobOperator(
+            task_id=f"trigger_glue_job_{table_name}",
+            job_name=f"S3_STAGE_{table_name}",  # Replace with your actual Glue job name
+            script_location=f"s3://aws-glue-assets-235494796624-ap-south-1/scripts/S3_STAGE_{table_name}.py",  # Adjust the script location as necessary
+            region_name="us-east-1",  # Adjust based on your region
+            iam_role_name="awsglueconsolefullaccess",
+        )
+        glue_job_tasks.append(glue_job_task)
+
+    # Set dependencies: Run Oracle to S3 tasks first, then trigger Glue job tasks
+    # All Oracle to S3 tasks will run in parallel, then trigger the Glue jobs
+    for oracle_task, glue_task in zip(oracle_to_s3_tasks, glue_job_tasks):
+        oracle_task >> glue_task
